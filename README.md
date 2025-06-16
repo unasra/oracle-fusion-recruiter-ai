@@ -26,7 +26,7 @@ The application consists of:
 
 ### Prerequisites
 
-- Python 3.8+
+- Python 3.8+ and <3.10
 - FastAPI
 - LangChain
 - Chroma DB
@@ -54,12 +54,16 @@ pip install -r requirements.txt
 ```bash
 mkdir -p data_json
 mkdir -p chroma
+mkdir -p data
 ```
 
 ## Usage
 
 ### Preparing Resume Data
 
+You can prepare resume data in two formats:
+
+#### JSON Format
 Place your resume data in the `data_json` folder as JSON files with the following structure:
 
 ```json
@@ -87,13 +91,32 @@ Or as a list of documents:
 ]
 ```
 
+#### PDF Format
+You can also add PDF resume files directly to the `data` folder. The system will automatically extract text content from these files during processing.
+
 ### Running the Server
 
 Start the FastAPI server:
 
 ```bash
-uvicorn main:app --reload
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+### Command-Line Usage (Without Frontend)
+
+If you prefer to use the system directly from the command line without a frontend:
+
+1. Create or update the vector database with your resume data:
+```bash
+python3 linkedin_evaluate.py --reset
+```
+
+2. Run a query against the indexed resumes:
+```bash
+python3 ai_search_query.py "Looking for a senior software engineer with 5+ years experience in Python"
+```
+
+The results will be printed to the console in JSON format.
 
 ## API Endpoints
 
