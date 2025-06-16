@@ -9,7 +9,7 @@ from langchain_community.vectorstores import Chroma
 
 
 CHROMA_PATH = "chroma"
-DATA_PATH = "data"
+DATA_PATH = "data_json"
 DATA_PATH_Md = "data/resources/"
 
 def main():
@@ -24,24 +24,58 @@ def main():
 
     # Create (or update) the data store.
     documents = load_documents()
-    chunks = split_documents(documents)
+    chunks = chunk_documents_by_resume(documents)
     print(f"Number of documents: {len(chunks)}")
     add_to_chroma(chunks)
 
 
 def load_documents():
-    document_loader = PyPDFDirectoryLoader(DATA_PATH)
-    return document_loader.load()
+    import json
+
+    docs = []
+    for filename in os.listdir(DATA_PATH):
+        if filename.endswith(".json"):
+            with open(os.path.join(DATA_PATH, filename), "r", encoding="utf-8") as f:
+                data = json.load(f)
+                doc = Document(
+                    page_content=json.dumps(data),
+                    metadata={"resume_id": filename, "source": os.path.join(DATA_PATH, filename)}
+                )
+                docs.append(doc)
+    return docs
 
 
-def split_documents(documents: list[Document]):
+from langchain.schema import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+
+def chunk_documents_by_resume(documents: list[Document]) -> list[Document]:
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
         chunk_overlap=80,
         length_function=len,
         is_separator_regex=False,
     )
-    return text_splitter.split_documents(documents)
+
+    resume_chunks = []
+
+    for doc in documents:
+        resume_id = doc.metadata["resume_id"]
+        splits = text_splitter.split_text(doc.page_content)
+
+        for idx, chunk_text in enumerate(splits):
+            chunk = Document(
+                page_content=chunk_text,
+                metadata={
+                    "resume_id": resume_id,
+                    "id": f"{resume_id}:{idx}",
+                    **doc.metadata,  # preserve original metadata
+                },
+            )
+            resume_chunks.append(chunk)
+
+    return resume_chunks
+
 
 
 def add_to_chroma(chunks: list[Document]):
@@ -75,33 +109,28 @@ def add_to_chroma(chunks: list[Document]):
         print("✅ No new documents to add")
 
 
-def calculate_chunk_ids(chunks):
-
-    # This will create IDs like "data/monopoly.pdf:6:2"
-    # Page Source : Page Number : Chunk Index
-
+def calculate_chunk_ids(chunks: list[Document]):
     last_page_id = None
     current_chunk_index = 0
 
     for chunk in chunks:
         source = chunk.metadata.get("source")
-        page = chunk.metadata.get("page")
-        current_page_id = f"{source}:{page}"
+        page = chunk.metadata.get("page", 0)
+        resume_id = os.path.basename(source)
+        chunk.metadata["resume_id"] = resume_id
 
-        # If the page ID is the same as the last one, increment the index.
+        current_page_id = f"{source}:{page}"
         if current_page_id == last_page_id:
             current_chunk_index += 1
         else:
             current_chunk_index = 0
 
-        # Calculate the chunk ID.
         chunk_id = f"{current_page_id}:{current_chunk_index}"
+        chunk.metadata["id"] = chunk_id
         last_page_id = current_page_id
 
-        # Add it to the page meta-data.
-        chunk.metadata["id"] = chunk_id
-
     return chunks
+
 
 
 def clear_database():
